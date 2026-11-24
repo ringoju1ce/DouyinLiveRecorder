@@ -436,30 +436,21 @@ uv run main.py
 
 1.快速启动
 
-最简单方法是运行项目中的 [docker-compose.yaml](https://github.com/ihmily/DouyinLiveRecorder/blob/main/docker-compose.yaml) 文件，只需简单执行以下命令：
+在 `docker-compose.yaml` 中设置 `PUID` 和 `PGID`（可用 `id -u` 和 `id -g` 查看），然后启动。首次启动会构建本地镜像：
 
 ```bash
-docker-compose up
+docker compose up --build
 ```
 
 可选 `-d` 在后台运行。
 
 
 
-2.构建镜像(可选)
+2.目录权限
 
-如果你只想简单的运行程序，则不需要做这一步。Docker镜像仓库中代码版本可能不是最新的，如果要运行本仓库主分支最新代码，可以本地自定义构建，通过修改 [docker-compose.yaml](https://github.com/ihmily/DouyinLiveRecorder/blob/main/docker-compose.yaml) 文件，如将镜像名修改为 `douyin-live-recorder:latest`，并取消 `# build: .` 注释，然后再执行
+`PUID` 和 `PGID` 默认为 `1000`。容器以 root 启动时，会递归修改四个挂载目录及其中已有文件的所有者，然后以指定用户运行。若指定的 UID 或 GID 为 `0`，则直接以 root 运行；如果容器本身以非 root 用户启动，则跳过所有者修改，需自行确保挂载目录可写。自定义录制路径也需要有写权限。
 
-```bash
-docker build -t douyin-live-recorder:latest .
-docker-compose up
-```
-
-或者直接使用下面命令进行构建并启动
-
-```bash
-docker-compose -f docker-compose.yaml up
-```
+新建文件默认权限为 `666`，目录为 `777`，其他本地用户也可以修改。实际权限可能受到程序或文件系统设置的影响。
 
 
 

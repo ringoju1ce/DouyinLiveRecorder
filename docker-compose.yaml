@@ -2,12 +2,15 @@ version: '3.8'
 
 services:
   app:
-    image: ihmily/douyin-live-recorder:latest
+    image: douyin-live-recorder:local
+    build: .
     environment:
       - TERM=xterm-256color
+      # 设置程序运行的用户和组 ID
+      - PUID=1000
+      - PGID=1000
     tty: true
     stdin_open: true
-    #build: .
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
