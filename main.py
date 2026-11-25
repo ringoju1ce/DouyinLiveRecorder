@@ -31,6 +31,7 @@ from src import spider, stream
 from src.proxy import ProxyDetector
 from src.utils import logger
 from src import utils
+from src.recording_status import RecordingStatus
 from msg_push import (
     dingtalk, xizhi, tg_bot, send_email, bark, ntfy, pushplus
 )
@@ -71,6 +72,7 @@ url_config_file = f'{script_path}/config/URL_config.ini'
 backup_dir = f'{script_path}/backup_config'
 text_encoding = 'utf-8-sig'
 rstr = r"[\/\\\:\*\？?\"\<\>\|&#.。,， ~！· ]"
+status = RecordingStatus(f'{script_path}/config/recording-status.json')
 default_path = f'{script_path}/downloads'
 os.makedirs(default_path, exist_ok=True)
 file_update_lock = threading.Lock()
@@ -188,86 +190,89 @@ def get_startup_info(system_type: str):
 
 def segment_video(converts_file_path: str, segment_save_file_path: str, segment_format: str, segment_time: str,
                   is_original_delete: bool = True) -> None:
-    try:
-        if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
-            ffmpeg_command = [
-                "ffmpeg",
-                "-i", converts_file_path,
-                "-c:v", "copy",
-                "-c:a", "copy",
-                "-map", "0",
-                "-f", "segment",
-                "-segment_time", segment_time,
-                "-segment_format", segment_format,
-                "-reset_timestamps", "1",
-                "-movflags", "+frag_keyframe+empty_moov",
-                segment_save_file_path,
-            ]
-            _output = subprocess.check_output(
-                ffmpeg_command, stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type)
-            )
-            if is_original_delete:
-                time.sleep(1)
-                if os.path.exists(converts_file_path):
-                    os.remove(converts_file_path)
-    except subprocess.CalledProcessError as e:
-        logger.error(f'Error occurred during conversion: {e}')
-    except Exception as e:
-        logger.error(f'An unknown error occurred: {e}')
+    with status.task('transcoding', os.path.basename(converts_file_path), segment_save_file_path):
+        try:
+            if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
+                ffmpeg_command = [
+                    "ffmpeg",
+                    "-i", converts_file_path,
+                    "-c:v", "copy",
+                    "-c:a", "copy",
+                    "-map", "0",
+                    "-f", "segment",
+                    "-segment_time", segment_time,
+                    "-segment_format", segment_format,
+                    "-reset_timestamps", "1",
+                    "-movflags", "+frag_keyframe+empty_moov",
+                    segment_save_file_path,
+                ]
+                _output = subprocess.check_output(
+                    ffmpeg_command, stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type)
+                )
+                if is_original_delete:
+                    time.sleep(1)
+                    if os.path.exists(converts_file_path):
+                        os.remove(converts_file_path)
+        except subprocess.CalledProcessError as e:
+            logger.error(f'Error occurred during conversion: {e}')
+        except Exception as e:
+            logger.error(f'An unknown error occurred: {e}')
 
 
 def converts_mp4(converts_file_path: str, is_original_delete: bool = True) -> None:
-    try:
-        if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
-            if converts_to_h264:
-                color_obj.print_colored("正在转码为MP4格式并重新编码为h264\n", color_obj.YELLOW)
-                ffmpeg_command = [
-                    "ffmpeg", "-i", converts_file_path,
-                    "-c:v", "libx264",
-                    "-preset", "veryfast",
-                    "-crf", "23",
-                    "-vf", "format=yuv420p",
-                    "-c:a", "copy",
-                    "-f", "mp4", converts_file_path.rsplit('.', maxsplit=1)[0] + ".mp4",
-                ]
-            else:
-                color_obj.print_colored("正在转码为MP4格式\n", color_obj.YELLOW)
-                ffmpeg_command = [
-                    "ffmpeg", "-i", converts_file_path,
-                    "-c:v", "copy",
-                    "-c:a", "copy",
-                    "-f", "mp4", converts_file_path.rsplit('.', maxsplit=1)[0] + ".mp4",
-                ]
-            _output = subprocess.check_output(
-                ffmpeg_command, stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type)
-            )
-            if is_original_delete:
-                time.sleep(1)
-                if os.path.exists(converts_file_path):
-                    os.remove(converts_file_path)
-    except subprocess.CalledProcessError as e:
-        logger.error(f'Error occurred during conversion: {e}')
-    except Exception as e:
-        logger.error(f'An unknown error occurred: {e}')
+    with status.task('transcoding', os.path.basename(converts_file_path), converts_file_path.rsplit('.', maxsplit=1)[0] + '.mp4'):
+        try:
+            if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
+                if converts_to_h264:
+                    color_obj.print_colored("正在转码为MP4格式并重新编码为h264\n", color_obj.YELLOW)
+                    ffmpeg_command = [
+                        "ffmpeg", "-i", converts_file_path,
+                        "-c:v", "libx264",
+                        "-preset", "veryfast",
+                        "-crf", "23",
+                        "-vf", "format=yuv420p",
+                        "-c:a", "copy",
+                        "-f", "mp4", converts_file_path.rsplit('.', maxsplit=1)[0] + ".mp4",
+                    ]
+                else:
+                    color_obj.print_colored("正在转码为MP4格式\n", color_obj.YELLOW)
+                    ffmpeg_command = [
+                        "ffmpeg", "-i", converts_file_path,
+                        "-c:v", "copy",
+                        "-c:a", "copy",
+                        "-f", "mp4", converts_file_path.rsplit('.', maxsplit=1)[0] + ".mp4",
+                    ]
+                _output = subprocess.check_output(
+                    ffmpeg_command, stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type)
+                )
+                if is_original_delete:
+                    time.sleep(1)
+                    if os.path.exists(converts_file_path):
+                        os.remove(converts_file_path)
+        except subprocess.CalledProcessError as e:
+            logger.error(f'Error occurred during conversion: {e}')
+        except Exception as e:
+            logger.error(f'An unknown error occurred: {e}')
 
 
 def converts_m4a(converts_file_path: str, is_original_delete: bool = True) -> None:
-    try:
-        if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
-            _output = subprocess.check_output([
-                "ffmpeg", "-i", converts_file_path,
-                "-n", "-vn",
-                "-c:a", "aac", "-bsf:a", "aac_adtstoasc", "-ab", "320k",
-                converts_file_path.rsplit('.', maxsplit=1)[0] + ".m4a",
-            ], stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type))
-            if is_original_delete:
-                time.sleep(1)
-                if os.path.exists(converts_file_path):
-                    os.remove(converts_file_path)
-    except subprocess.CalledProcessError as e:
-        logger.error(f'Error occurred during conversion: {e}')
-    except Exception as e:
-        logger.error(f'An unknown error occurred: {e}')
+    with status.task('transcoding', os.path.basename(converts_file_path), converts_file_path.rsplit('.', maxsplit=1)[0] + '.m4a'):
+        try:
+            if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
+                _output = subprocess.check_output([
+                    "ffmpeg", "-i", converts_file_path,
+                    "-n", "-vn",
+                    "-c:a", "aac", "-bsf:a", "aac_adtstoasc", "-ab", "320k",
+                    converts_file_path.rsplit('.', maxsplit=1)[0] + ".m4a",
+                ], stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type))
+                if is_original_delete:
+                    time.sleep(1)
+                    if os.path.exists(converts_file_path):
+                        os.remove(converts_file_path)
+        except subprocess.CalledProcessError as e:
+            logger.error(f'Error occurred during conversion: {e}')
+        except Exception as e:
+            logger.error(f'An unknown error occurred: {e}')
 
 
 def generate_subtitles(record_name: str, ass_filename: str, sub_format: str = 'srt') -> None:
@@ -383,38 +388,39 @@ def clear_record_info(record_name: str, record_url: str) -> None:
 
 
 def direct_download_stream(source_url: str, save_path: str, record_name: str, live_url: str, platform: str) -> bool:
-    try:
-        with open(save_path, 'wb') as f:
-            client = httpx.Client(timeout=None)
+    with status.task('recording', record_name, save_path):
+        try:
+            with open(save_path, 'wb') as f:
+                client = httpx.Client(timeout=None)
 
-            headers = {}
-            header_params = get_record_headers(platform, live_url)
-            if header_params:
-                key, value = header_params.split(":", 1)
-                headers[key] = value
+                headers = {}
+                header_params = get_record_headers(platform, live_url)
+                if header_params:
+                    key, value = header_params.split(":", 1)
+                    headers[key] = value
 
-            with client.stream('GET', source_url, headers=headers, follow_redirects=True) as response:
-                if response.status_code != 200:
-                    logger.error(f"请求直播流失败，状态码: {response.status_code}")
-                    return False
-
-                downloaded = 0
-                chunk_size = 1024 * 16
-
-                for chunk in response.iter_bytes(chunk_size):
-                    if live_url in url_comments or exit_recording:
-                        color_obj.print_colored(f"[{record_name}]录制时已被注释或请求停止,下载中断", color_obj.YELLOW)
-                        clear_record_info(record_name, live_url)
+                with client.stream('GET', source_url, headers=headers, follow_redirects=True) as response:
+                    if response.status_code != 200:
+                        logger.error(f"请求直播流失败，状态码: {response.status_code}")
                         return False
 
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                print()
-                return True
-    except Exception as e:
-        logger.error(f"FLV下载错误: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
-        return False
+                    downloaded = 0
+                    chunk_size = 1024 * 16
+
+                    for chunk in response.iter_bytes(chunk_size):
+                        if live_url in url_comments or exit_recording:
+                            color_obj.print_colored(f"[{record_name}]录制时已被注释或请求停止,下载中断", color_obj.YELLOW)
+                            clear_record_info(record_name, live_url)
+                            return False
+
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                    print()
+                    return True
+        except Exception as e:
+            logger.error(f"FLV下载错误: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+            return False
 
 
 def check_subprocess(record_name: str, record_url: str, ffmpeg_command: list, save_type: str,
@@ -433,20 +439,21 @@ def check_subprocess(record_name: str, record_url: str, ffmpeg_command: list, sa
         create_var[subs_thread_name].daemon = True
         create_var[subs_thread_name].start()
 
-    while process.poll() is None:
-        if record_url in url_comments or exit_recording:
-            color_obj.print_colored(f"[{record_name}]录制时已被注释,本条线程将会退出", color_obj.YELLOW)
-            clear_record_info(record_name, record_url)
-            # process.terminate()
-            if os.name == 'nt':
-                if process.stdin:
-                    process.stdin.write(b'q')
-                    process.stdin.close()
-            else:
-                process.send_signal(signal.SIGINT)
-            process.wait()
-            return True
-        time.sleep(1)
+    with status.task('recording', record_name, save_file_path):
+        while process.poll() is None:
+            if record_url in url_comments or exit_recording:
+                color_obj.print_colored(f"[{record_name}]录制时已被注释,本条线程将会退出", color_obj.YELLOW)
+                clear_record_info(record_name, record_url)
+                # process.terminate()
+                if os.name == 'nt':
+                    if process.stdin:
+                        process.stdin.write(b'q')
+                        process.stdin.close()
+                else:
+                    process.send_signal(signal.SIGINT)
+                process.wait()
+                return True
+            time.sleep(1)
 
     return_code = process.returncode
     stop_time = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -1723,6 +1730,7 @@ if not check_ffmpeg_existence():
     logger.error("缺少ffmpeg无法进行录制，程序退出")
     sys.exit(1)
 os.makedirs(os.path.dirname(config_file), exist_ok=True)
+status.start()
 t3 = threading.Thread(target=backup_file_start, args=(), daemon=True)
 t3.start()
 utils.remove_duplicate_lines(url_config_file)
@@ -1799,6 +1807,7 @@ while True:
     except OSError as err:
         logger.error(f"发生 I/O 错误: {err}")
 
+    status.set_enabled(options.get(read_config_value(config, '录制设置', '是否生成录制状态文件', '否'), False))
     video_save_path = read_config_value(config, '录制设置', '直播保存路径(不填则默认)', "")
     folder_by_author = options.get(read_config_value(config, '录制设置', '保存文件夹是否以作者区分', "是"), False)
     folder_by_time = options.get(read_config_value(config, '录制设置', '保存文件夹是否以时间区分', "否"), False)
